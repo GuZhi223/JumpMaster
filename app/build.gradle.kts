@@ -17,8 +17,8 @@ plugins {
  *   keyAlias=jumpmaster
  *   keyPassword=******
  *
- * Without this file `assembleRelease` still succeeds and produces an unsigned APK,
- * which is enough for local testing via `adb install -r`.
+ * Without this file `assembleRelease` falls back to the default debug signing key,
+ * so the resulting APK is still installable via `adb install -r` / 直接分发安装.
  */
 val keystorePropertiesFile = rootProject.file("keystore.properties")
 val keystoreProperties = Properties().apply {
@@ -63,7 +63,11 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Fallback to the default (debug) signing key so `assembleRelease`
+            // always yields an installable APK. Fine for personal distribution;
+            // drop a keystore.properties in place for a real release key.
             signingConfig = signingConfigs.findByName("release")
+                ?: signingConfigs.getByName("debug")
         }
     }
 

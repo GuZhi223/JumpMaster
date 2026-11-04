@@ -87,11 +87,14 @@ $env:JAVA_HOME = "C:\path\to\jdk-17"
 产物位置：
 
 - `app/build/outputs/apk/debug/app-debug.apk`
-- `app/build/outputs/apk/release/app-release.apk`（未配置签名时为 `app-release-unsigned.apk`）
+- `app/build/outputs/apk/release/app-release.apk`
 
 ### 4. 发布签名（可选）
 
-在仓库根目录新建 `keystore.properties`（已被 git 忽略）：
+默认情况下 release 包使用**调试签名**（`~/.android/debug.keystore`），可以直接安装、直接发给别人，
+够用于自用和小范围分发。
+
+想要一个独立签名的正式包时，在仓库根目录新建 `keystore.properties`（已被 git 忽略）：
 
 ```properties
 storeFile=../keys/release.jks
@@ -100,7 +103,9 @@ keyAlias=jumpmaster
 keyPassword=******
 ```
 
-存在该文件时 `assembleRelease` 会自动签名；不存在则退化为未签名 APK，`adb install -r` 仍可安装。
+存在该文件时 `assembleRelease` 就改用这把 release key 签名。
+
+> 注意：调试签名和正式签名是两把钥匙，装过其中一种的机器上新装另一种需要先卸载旧版本。
 
 ---
 
