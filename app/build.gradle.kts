@@ -1,7 +1,30 @@
+import java.util.Properties
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+}
+
+/**
+ * Optional release signing.
+ *
+ * Create `keystore.properties` in the repository root (it is git-ignored) with:
+ *
+ *   storeFile=../path/to/release.jks
+ *   storePassword=******
+ *   keyAlias=jumpmaster
+ *   keyPassword=******
+ *
+ * Without this file `assembleRelease` still succeeds and produces an unsigned APK,
+ * which is enough for local testing via `adb install -r`.
+ */
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        keystorePropertiesFile.inputStream().use { load(it) }
+    }
 }
 
 android {
@@ -11,25 +34,42 @@ android {
     defaultConfig {
         applicationId = "com.jumpmaster.app"
         minSdk = 26
+        // Kept at 34 deliberately: Android 15/16 tighten background foreground-service
+        // starts and overlay behaviour, which this automation tool depends on.
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1.0"
+    }
+
+    signingConfigs {
+        if (keystorePropertiesFile.exists()) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
         release {
+            // R8 stays off: the reflection-heavy ADB client and the accessibility /
+            // overlay services are fragile under shrinking, and this app is not
+            // distributed through a store where size matters.
             isMinifyEnabled = false
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            isShrinkResources = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            signingConfig = signingConfigs.findByName("release")
         }
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
-    }
-
-    kotlinOptions {
-        jvmTarget = "1.8"
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     buildFeatures {
@@ -40,6 +80,17 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+    }
+
+    lint {
+        // Metadata/lint nits should not block local builds.
+        abortOnError = false
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
     }
 }
 
@@ -61,13 +112,6 @@ dependencies {
 
     // Navigation
     implementation("androidx.navigation:navigation-compose:2.7.6")
-
-    // Lifecycle
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
-
-    // DataStore for config
-    implementation("androidx.datastore:datastore-preferences:1.0.0")
 
     // Direct ADB client with Android 11+ wireless pairing support
     implementation("com.flyfishxu:kadb:2.1.1")

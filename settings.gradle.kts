@@ -7,10 +7,12 @@ pluginManagement {
 }
 
 dependencyResolutionManagement {
+    // All repositories must be declared here, not per module.
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
         google()
         mavenCentral()
+        // cadb / kadb snapshots
         maven("https://jitpack.io")
     }
 }

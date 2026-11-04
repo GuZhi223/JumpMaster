@@ -1,29 +1,38 @@
-*.iml
-.gradle
-/local.properties
-/.idea
-.DS_Store
-/build
-/app/build
-/captures
-.externalNativeBuild
-.cxx
+# ── Gradle ────────────────────────────────────────────────
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+.kotlin/
+
+# ── Local / IDE ───────────────────────────────────────────
 local.properties
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+captures/
+.externalNativeBuild/
+.cxx/
+
+# ── Build & packaging artifacts ───────────────────────────
 *.apk
 *.ap_
 *.dex
 *.class
-*.jar
-*.aar
-*.so
+*.hprof
+output-metadata.json
+
+# ── Native / prebuilt libraries pulled in by dependencies ─
 *.dylib
 *.dll
-*.exe
-*.png
-!app/src/main/res/**/*.png
-!app/src/main/res/**/*.xml
-*.jpg
-*.jpeg
-*.gif
-*.webp
-*.bmp
+
+# ── Signing material (never commit) ───────────────────────
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+
+# ── Local debug screenshots ───────────────────────────────
+/screenshots/
+*.log
