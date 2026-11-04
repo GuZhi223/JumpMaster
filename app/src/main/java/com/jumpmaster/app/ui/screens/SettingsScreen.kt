@@ -9,7 +9,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.sp
 import com.jumpmaster.app.core.CaptureMode
 import com.jumpmaster.app.core.DeviceConfig
 import com.jumpmaster.app.core.adb.AdbConnectionService
-import com.jumpmaster.app.service.TouchAccessibilityService
+import com.jumpmaster.app.core.root.RootCommandService
 import com.jumpmaster.app.ui.components.ParameterSlider
 import com.jumpmaster.app.ui.theme.*
 
@@ -29,8 +29,12 @@ import com.jumpmaster.app.ui.theme.*
 @Composable
 fun SettingsScreen(
     config: DeviceConfig,
+    accessibilityRunning: Boolean,
     onConfigChange: (DeviceConfig) -> Unit,
     onSaveAdb: () -> Unit,
+    onOpenAccessibilitySettings: () -> Unit,
+    onOpenAdbSetup: () -> Unit,
+    onActivateRoot: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -49,7 +53,7 @@ fun SettingsScreen(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.Default.ArrowBack, "返回", tint = Color(0xFF666666))
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回", tint = Color(0xFF666666))
             }
             Text(text = "设置", style = AppTypography.h2)
         }
@@ -88,6 +92,49 @@ fun SettingsScreen(
                         modifier = Modifier.weight(1f),
                         onClick = { onConfigChange(config.copy(captureMode = CaptureMode.ADB)) }
                     )
+                    ModeChip(
+                        label = "Root模式",
+                        desc = "本机 Root 控制",
+                        selected = config.captureMode == CaptureMode.ROOT,
+                        modifier = Modifier.weight(1f),
+                        onClick = { onConfigChange(config.copy(captureMode = CaptureMode.ROOT)) }
+                    )
+                }
+            }
+
+            if (config.captureMode == CaptureMode.ROOT) {
+                Spacer(modifier = Modifier.height(20.dp))
+                SectionLabel("Root 权限")
+                CardSection {
+                    val rootState = RootCommandService.state.value
+                    val statusText = when (rootState) {
+                        RootCommandService.State.UNKNOWN -> "○ 尚未检测"
+                        RootCommandService.State.CHECKING -> "● 正在请求授权…"
+                        RootCommandService.State.GRANTED -> "● 已获得 Root 权限"
+                        RootCommandService.State.DENIED -> "● Root 权限不可用"
+                    }
+                    val statusColor = when (rootState) {
+                        RootCommandService.State.GRANTED -> GreenAccent
+                        RootCommandService.State.CHECKING -> YellowAccent
+                        RootCommandService.State.DENIED -> RedAccent
+                        RootCommandService.State.UNKNOWN -> TextMuted
+                    }
+                    Text(statusText, style = AppTypography.monoSmall, color = statusColor)
+                    Text(
+                        text = "通过 su 直接执行截屏和触摸，无需无线调试与无障碍服务。",
+                        style = AppTypography.monoSmall,
+                        color = TextMuted,
+                        modifier = Modifier.padding(vertical = 10.dp)
+                    )
+                    Button(
+                        onClick = onActivateRoot,
+                        enabled = rootState != RootCommandService.State.CHECKING,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = PurpleAccent),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text(if (rootState == RootCommandService.State.GRANTED) "重新检测" else "检测并请求 Root 权限")
+                    }
                 }
             }
 
@@ -97,10 +144,29 @@ fun SettingsScreen(
                 SectionLabel("ADB 无线调试")
                 CardSection {
                     Text(
-                        text = "在目标设备上开启: 开发者选项 → 无线调试",
+                        text = "在目标设备上开启：开发者选项 → 无线调试",
                         style = AppTypography.monoSmall,
                         color = YellowAccent,
                         modifier = Modifier.padding(bottom = 16.dp)
+                    )
+
+                    Button(
+                        onClick = onOpenAdbSetup,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = PurpleAccent,
+                            contentColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("打开无线调试 + 悬浮填写", style = AppTypography.body)
+                    }
+
+                    Text(
+                        text = "悬浮面板会停留在系统设置上方，无需来回切换应用。",
+                        style = AppTypography.monoSmall,
+                        color = TextMuted,
+                        modifier = Modifier.padding(top = 8.dp, bottom = 16.dp)
                     )
 
                     // Host / Port
@@ -281,12 +347,21 @@ fun SettingsScreen(
                     ) {
                         Column {
                             Text(text = "服务状态", style = AppTypography.body, color = Color(0xFFCCCCCC))
-                            val running = TouchAccessibilityService.isRunning()
                             Text(
-                                text = if (running) "● 已启用" else "○ 未启用",
+                                text = if (accessibilityRunning) "● 已启用" else "○ 未启用",
                                 style = AppTypography.monoSmall,
-                                color = if (running) GreenAccent else Color(0xFF555555)
+                                color = if (accessibilityRunning) GreenAccent else Color(0xFF555555)
                             )
+                        }
+                        Button(
+                            onClick = onOpenAccessibilitySettings,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (accessibilityRunning) DarkBorder else BluePrimary,
+                                contentColor = Color.White
+                            ),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text(if (accessibilityRunning) "管理" else "前往开启")
                         }
                     }
                 }

@@ -26,8 +26,6 @@ class FloatingWindowService : Service() {
         private const val TAG = "FloatingWindow"
         const val ACTION_SHOW = "com.jumpmaster.SHOW_FLOATING"
         const val ACTION_HIDE = "com.jumpmaster.HIDE_FLOATING"
-        const val ACTION_TEMP_HIDE = "com.jumpmaster.TEMP_HIDE"
-        const val ACTION_TEMP_SHOW = "com.jumpmaster.TEMP_SHOW"
         const val ACTION_UPDATE_STATUS = "com.jumpmaster.UPDATE_STATUS"
         const val ACTION_UPDATE_COUNT = "com.jumpmaster.UPDATE_COUNT"
         const val ACTION_UPDATE_METRICS = "com.jumpmaster.UPDATE_METRICS"
@@ -88,31 +86,6 @@ class FloatingWindowService : Service() {
                 Log.d(TAG, "Hiding floating window")
                 hideFloatingWindow()
                 stopSelf()
-            }
-            ACTION_TEMP_HIDE -> {
-                Log.d(TAG, "Temporarily hiding floating window for screenshot")
-                floatingView?.let {
-                    try {
-                        if (isViewAttached) {
-                            windowManager?.removeView(it)
-                            isViewAttached = false
-                        }
-                    } catch (_: Exception) {}
-                }
-            }
-            ACTION_TEMP_SHOW -> {
-                Log.d(TAG, "Restoring floating window after screenshot")
-                floatingView?.let { view ->
-                    try {
-                        val params = layoutParams ?: createLayoutParams()
-                        layoutParams = params
-                        setupDragListener(view, params)
-                        if (!isViewAttached) {
-                            windowManager?.addView(view, params)
-                            isViewAttached = true
-                        }
-                    } catch (_: Exception) {}
-                }
             }
             ACTION_UPDATE_STATUS -> {
                 val status = intent.getStringExtra(EXTRA_STATUS) ?: "idle"

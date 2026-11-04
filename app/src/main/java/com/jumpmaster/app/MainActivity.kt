@@ -18,15 +18,20 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
 import androidx.navigation.compose.rememberNavController
+import androidx.lifecycle.lifecycleScope
 import com.jumpmaster.app.core.CaptureMode
 import com.jumpmaster.app.core.DeviceConfig
 import com.jumpmaster.app.core.JumpController
 import com.jumpmaster.app.core.adb.AdbConnectionService
+import com.jumpmaster.app.core.root.RootCommandService
 import com.jumpmaster.app.data.ConfigRepository
 import com.jumpmaster.app.service.FloatingWindowService
+import com.jumpmaster.app.service.AdbSetupOverlayService
 import com.jumpmaster.app.service.ScreenCaptureService
+import com.jumpmaster.app.service.TouchAccessibilityService
 import com.jumpmaster.app.ui.navigation.AppNavigation
 import com.jumpmaster.app.ui.theme.JumpMasterTheme
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -41,9 +46,12 @@ class MainActivity : ComponentActivity() {
     private val _status = mutableStateOf(JumpController.Status.IDLE)
     private val _jumpCount = mutableStateOf(0)
     private val _isRunning = mutableStateOf(false)
+    private val _accessibilityRunning = mutableStateOf(false)
     private val _config = mutableStateOf(DeviceConfig())
     private val _lastResult = mutableStateOf<com.jumpmaster.app.core.ImageAnalyzer.AnalysisResult?>(null)
     private val _lastScreenshot = mutableStateOf<android.graphics.Bitmap?>(null)
+    private var waitingForAccessibility = false
+    private var waitingForAdbSetupOverlay = false
 
     // MediaProjection permission launcher
     private val screenCaptureLauncher = registerForActivityResult(
@@ -71,10 +79,16 @@ class MainActivity : ComponentActivity() {
         Log.i(TAG, "overlayPermissionLauncher callback: canDrawOverlays=$hasOverlay")
         try {
             if (hasOverlay) {
-                startFloatingWindowService()
-                proceedAfterOverlayPermission()
+                if (waitingForAdbSetupOverlay) {
+                    waitingForAdbSetupOverlay = false
+                    openAdbSetup()
+                } else {
+                    startFloatingWindowService()
+                    proceedAfterOverlayPermission()
+                }
             } else {
                 Log.w(TAG, "Overlay permission denied")
+                waitingForAdbSetupOverlay = false
                 Toast.makeText(this, "悬浮窗权限被拒绝", Toast.LENGTH_SHORT).show()
             }
         } catch (e: Exception) {
@@ -158,6 +172,7 @@ class MainActivity : ComponentActivity() {
                         status = _status.value,
                         jumpCount = _jumpCount.value,
                         isRunning = _isRunning.value,
+                        accessibilityRunning = _accessibilityRunning.value,
                         config = _config.value,
                         lastResult = _lastResult.value,
                         lastScreenshot = _lastScreenshot.value,
@@ -205,7 +220,10 @@ class MainActivity : ComponentActivity() {
                                     pairingPort = c.adbPairingPort.takeIf { it > 0 }
                                 )
                             }
-                        }
+                        },
+                        onOpenAccessibilitySettings = { openAccessibilitySettings(false) },
+                        onOpenAdbSetup = { openAdbSetup() },
+                        onActivateRoot = { activateRoot() }
                     )
                 }
             }
@@ -234,6 +252,7 @@ class MainActivity : ComponentActivity() {
             when (_config.value.captureMode) {
                 CaptureMode.LOCAL -> startLocalMode()
                 CaptureMode.ADB -> startAdbModePrepare()
+                CaptureMode.ROOT -> startRootModePrepare()
             }
         } catch (e: Exception) {
             Log.e(TAG, "prepareServices failed", e)
@@ -290,6 +309,7 @@ class MainActivity : ComponentActivity() {
         when (_config.value.captureMode) {
             CaptureMode.LOCAL -> startLocalMode()
             CaptureMode.ADB -> startAdbModePrepare()
+            CaptureMode.ROOT -> startRootModePrepare()
         }
     }
 
@@ -298,12 +318,17 @@ class MainActivity : ComponentActivity() {
         when (_config.value.captureMode) {
             CaptureMode.LOCAL -> startLocalMode()
             CaptureMode.ADB -> startAdbModePrepare()
+            CaptureMode.ROOT -> startRootModePrepare()
         }
     }
 
     // ── LOCAL mode (MediaProjection + AccessibilityService) ──
 
     private fun startLocalMode() {
+        if (!TouchAccessibilityService.isRunning()) {
+            openAccessibilitySettings(true)
+            return
+        }
         Log.i(TAG, "startLocalMode: requesting screen capture permission")
         try {
             val projectionManager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
@@ -312,6 +337,57 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) {
             Log.e(TAG, "startLocalMode failed", e)
             Toast.makeText(this, "无法请求截屏权限: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun openAccessibilitySettings(continueAfterGrant: Boolean) {
+        waitingForAccessibility = continueAfterGrant
+        Toast.makeText(this, "请找到 JumpMaster 并开启无障碍服务", Toast.LENGTH_LONG).show()
+        try {
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        } catch (e: Exception) {
+            Log.e(TAG, "Unable to open accessibility settings", e)
+            Toast.makeText(this, "无法打开无障碍设置: ${e.message}", Toast.LENGTH_LONG).show()
+            waitingForAccessibility = false
+        }
+    }
+
+    private fun openAdbSetup() {
+        if (!Settings.canDrawOverlays(this)) {
+            waitingForAdbSetupOverlay = true
+            Toast.makeText(this, "请先授予悬浮窗权限，再打开无线调试助手", Toast.LENGTH_LONG).show()
+            val intent = Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:$packageName")
+            )
+            overlayPermissionLauncher.launch(intent)
+            return
+        }
+        val intent = Intent(this, AdbSetupOverlayService::class.java).apply {
+            action = AdbSetupOverlayService.ACTION_SHOW
+        }
+        startForegroundService(intent)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val enabled = TouchAccessibilityService.isRunning()
+        _accessibilityRunning.value = enabled
+
+        if (::configRepository.isInitialized) {
+            val metrics = resources.displayMetrics
+            val refreshed = configRepository.loadConfig(
+                metrics.widthPixels,
+                metrics.heightPixels,
+                metrics.densityDpi
+            )
+            _config.value = refreshed
+            if (::jumpController.isInitialized) jumpController.config = refreshed
+        }
+
+        if (waitingForAccessibility && enabled) {
+            waitingForAccessibility = false
+            Handler(Looper.getMainLooper()).post { startLocalMode() }
         }
     }
 
@@ -371,6 +447,29 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun startRootModePrepare() {
+        try {
+            startFloatingWindowService()
+            Toast.makeText(this, "请切换到跳一跳游戏，然后点击悬浮窗开始", Toast.LENGTH_LONG).show()
+            moveTaskToBack(true)
+            Handler(Looper.getMainLooper()).postDelayed({ moveTaskToBack(true) }, 500)
+        } catch (e: Exception) {
+            Log.e(TAG, "startRootModePrepare failed", e)
+            Toast.makeText(this, "Root 模式启动失败: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun activateRoot() {
+        lifecycleScope.launch {
+            val granted = RootCommandService.requestAccess()
+            Toast.makeText(
+                this@MainActivity,
+                if (granted) "Root 权限已获取" else "Root 权限获取失败，请检查 Root 管理器",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
     // ── Shared ──
 
     private fun startFloatingWindowService() {
@@ -391,14 +490,16 @@ class MainActivity : ComponentActivity() {
         jumpController.stop()
 
         try {
-            if (_config.value.captureMode == CaptureMode.LOCAL) {
-                val stopCapture = Intent(this, ScreenCaptureService::class.java).apply {
-                    action = ScreenCaptureService.ACTION_STOP
+            when (_config.value.captureMode) {
+                CaptureMode.LOCAL -> {
+                    val stopCapture = Intent(this, ScreenCaptureService::class.java).apply {
+                        action = ScreenCaptureService.ACTION_STOP
+                    }
+                    startService(stopCapture)
+                    Log.d(TAG, "ScreenCaptureService stop sent")
                 }
-                startService(stopCapture)
-                Log.d(TAG, "ScreenCaptureService stop sent")
-            } else {
-                Log.d(TAG, "ADB connection kept for reuse")
+                CaptureMode.ADB -> Log.d(TAG, "ADB connection kept for reuse")
+                CaptureMode.ROOT -> Log.d(TAG, "Root mode stopped")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to stop capture service", e)

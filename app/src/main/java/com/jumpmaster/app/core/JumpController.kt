@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color as AndroidColor
 import android.graphics.Paint
+import android.os.Build
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
@@ -13,8 +14,10 @@ import java.io.File
 import java.io.FileOutputStream
 import android.os.VibrationEffect
 import android.os.Vibrator
+import android.os.VibratorManager
 import android.util.Log
 import com.jumpmaster.app.core.adb.AdbConnectionService
+import com.jumpmaster.app.core.root.RootCommandService
 import com.jumpmaster.app.service.FloatingWindowService
 import com.jumpmaster.app.service.ScreenCaptureService
 import com.jumpmaster.app.service.TouchAccessibilityService
@@ -25,9 +28,10 @@ import kotlin.random.Random
  * Main controller that orchestrates the jump flow:
  * capture → analyze → calculate → press → wait → repeat
  *
- * Supports two backends:
+ * Supports three backends:
  * - LOCAL: MediaProjection + AccessibilityService (on-device)
  * - ADB: Wireless ADB debugging (remote device or self-control)
+ * - ROOT: Local root shell commands
  */
 class JumpController(private val context: Context) {
 
@@ -55,7 +59,12 @@ class JumpController(private val context: Context) {
 
     private val imageAnalyzer = ImageAnalyzer(config)
     private val handler = Handler(Looper.getMainLooper())
-    private val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+    private val vibrator: Vibrator? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
+    } else {
+        @Suppress("DEPRECATION")
+        context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+    }
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private var running = false
@@ -80,6 +89,7 @@ class JumpController(private val context: Context) {
         when (config.captureMode) {
             CaptureMode.LOCAL -> startLocalMode()
             CaptureMode.ADB -> startAdbMode()
+            CaptureMode.ROOT -> startRootMode()
         }
     }
 
@@ -99,6 +109,7 @@ class JumpController(private val context: Context) {
         when (config.captureMode) {
             CaptureMode.LOCAL -> executeLocalJumpCycle()
             CaptureMode.ADB -> executeAdbJumpCycle()
+            CaptureMode.ROOT -> executeRootJumpCycle()
         }
     }
 
@@ -145,20 +156,15 @@ class JumpController(private val context: Context) {
         setStatus(Status.CAPTURE)
         updateFloatingStatus("capture")
         addLog("截屏中")
-        setFloatingVisible(false)
 
         handler.postDelayed({
-            if (!running || paused) {
-                setFloatingVisible(true)
-                return@postDelayed
-            }
+            if (!running || paused) return@postDelayed
             // NOTE: Removed foreground check that relied on AccessibilityEvent
             // because AccessibilityEvent only fires on window/focus changes,
             // causing false "please switch to game" prompts after the first jump.
             // The user is already in the game when they start the controller.
             TouchAccessibilityService.captureScreenshot { accessibilityScreenshot ->
                 val screenshot = accessibilityScreenshot ?: ScreenCaptureService.captureScreen()
-                setFloatingVisible(true)
 
                 if (!running || paused) return@captureScreenshot
 
@@ -352,10 +358,7 @@ class JumpController(private val context: Context) {
             }
 
             // Step 1: Screenshot via ADB
-            withContext(Dispatchers.Main) { setFloatingVisible(false) }
-            delay(250)
             val screenshot = adbService.captureScreen()
-            withContext(Dispatchers.Main) { setFloatingVisible(true) }
             if (!running || paused) return@launch
             if (screenshot == null) {
                 Log.w(TAG, "ADB screenshot failed")
@@ -439,6 +442,105 @@ class JumpController(private val context: Context) {
         }
     }
 
+    // ── ROOT mode (local su shell) ──
+
+    private fun startRootMode() {
+        setStatus(Status.CONNECTING)
+        updateFloatingStatus("connecting")
+        addLog("正在请求 Root 权限")
+        scope.launch {
+            if (!RootCommandService.requestAccess()) {
+                running = false
+                setStatus(Status.IDLE)
+                updateFloatingStatus("error")
+                addLog("Root 权限被拒绝或设备未 Root")
+                listener?.onError("Root 权限获取失败，请在 Root 管理器中允许 JumpMaster")
+                return@launch
+            }
+
+            running = true
+            paused = false
+            jumpCount = 0
+            resetRestPlan()
+            RootCommandService.getScreenDensity()?.let { density ->
+                val rootHeadDiameter = density / 8f
+                if (rootHeadDiameter > 0f) config = config.copy(headDiameter = rootHeadDiameter)
+            }
+            updateFloatingStatus("running")
+            addLog("Root 模式已激活")
+            executeRootJumpCycle()
+        }
+    }
+
+    private fun executeRootJumpCycle() {
+        if (!running || paused) return
+        setStatus(Status.CAPTURE)
+        updateFloatingStatus("capture")
+        addLog("Root 截屏中")
+
+        scope.launch {
+            val screenshot = RootCommandService.captureScreen()
+            if (!running || paused) return@launch
+            if (screenshot == null) {
+                addLog("Root 截屏失败")
+                listener?.onError("Root 截屏失败")
+                delay(1000)
+                if (running && !paused) executeRootJumpCycle()
+                return@launch
+            }
+
+            setStatus(Status.DETECT)
+            updateFloatingStatus("detect")
+            addLog("识别中")
+            val result = imageAnalyzer.analyze(screenshot)
+            if (!running || paused) return@launch
+            if (result == null) {
+                addLog("识别失败")
+                listener?.onError("识别失败")
+                delay(1000)
+                if (running && !paused) executeRootJumpCycle()
+                return@launch
+            }
+
+            lastResult = result
+            lastScreenshot = screenshot
+            saveDebugScreenshot(screenshot, result)
+            setStatus(Status.JUMP)
+            updateFloatingStatus("jump")
+            addLog("距离 ${result.distance.toInt()}px · ${result.pressTimeMs}ms")
+            vibrate()
+
+            val press = JumpTouch.createOriginalSwipePosition(screenshot.width, screenshot.height)
+            val success = RootCommandService.performLongPress(
+                press.startX,
+                press.startY,
+                press.endX,
+                press.endY,
+                result.pressTimeMs
+            )
+            if (success) {
+                jumpCount++
+                jumpsSinceRest++
+                updateFloatingMetrics(jumpCount, result.pressTimeMs, result.distance, 0)
+                listener?.onJumpCompleted(jumpCount, result)
+            } else {
+                addLog("Root 触摸失败")
+            }
+
+            if (restIfNeededSuspend()) {
+                if (running && !paused) executeRootJumpCycle()
+                return@launch
+            }
+            val delayMs = (config.jumpDelay + Random.nextLong(-200, 300)).coerceAtLeast(800)
+            updateFloatingMetrics(jumpCount, result.pressTimeMs, result.distance, delayMs)
+            delay(delayMs)
+            if (running && !paused) {
+                setStatus(Status.IDLE)
+                executeRootJumpCycle()
+            }
+        }
+    }
+
     // ── Shared helpers ──
 
     /**
@@ -498,7 +600,7 @@ class JumpController(private val context: Context) {
 
     private fun vibrate() {
         if (config.vibrate) {
-            vibrator.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE))
+            vibrator?.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE))
         }
     }
 
@@ -537,14 +639,6 @@ class JumpController(private val context: Context) {
         try { context.startService(intent) } catch (e: Exception) {
             Log.w(TAG, "Failed to add floating log", e)
         }
-    }
-
-    private fun setFloatingVisible(visible: Boolean) {
-        val intent = Intent(context, FloatingWindowService::class.java).apply {
-            action = if (visible) FloatingWindowService.ACTION_TEMP_SHOW
-                     else FloatingWindowService.ACTION_TEMP_HIDE
-        }
-        try { context.startService(intent) } catch (_: Exception) {}
     }
 
     private fun resetRestPlan() {

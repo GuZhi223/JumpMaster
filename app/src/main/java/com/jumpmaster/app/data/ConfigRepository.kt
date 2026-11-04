@@ -66,4 +66,15 @@ class ConfigRepository(context: Context) {
             apply()
         }
     }
+
+    /** Update only wireless ADB fields from the setup overlay. */
+    fun saveAdbConfig(host: String, port: Int, pairingCode: String, pairingPort: Int) {
+        prefs.edit().apply {
+            putString(KEY_ADB_HOST, host)
+            putInt(KEY_ADB_PORT, port)
+            putString(KEY_ADB_PAIRING_CODE, pairingCode)
+            putInt(KEY_ADB_PAIRING_PORT, pairingPort)
+            apply()
+        }
+    }
 }

@@ -46,7 +46,21 @@
         <service
             android:name=".service.FloatingWindowService"
             android:foregroundServiceType="specialUse"
-            android:exported="false" />
+            android:exported="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="游戏运行时显示控制面板" />
+        </service>
+
+        <!-- 无线 ADB 配对时显示在系统设置上方的可编辑面板 -->
+        <service
+            android:name=".service.AdbSetupOverlayService"
+            android:foregroundServiceType="specialUse"
+            android:exported="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="在系统无线调试设置上方填写本机配对信息" />
+        </service>
 
         <!-- 无障碍触摸服务 -->
         <service

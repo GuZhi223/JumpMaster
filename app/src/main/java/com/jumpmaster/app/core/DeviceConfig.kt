@@ -4,7 +4,9 @@ enum class CaptureMode {
     /** MediaProjection + AccessibilityService (local, on-device) */
     LOCAL,
     /** ADB wireless debugging (remote or local device) */
-    ADB
+    ADB,
+    /** Root shell commands executed directly on this device */
+    ROOT
 }
 
 data class DeviceConfig(

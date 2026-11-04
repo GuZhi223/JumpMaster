@@ -23,12 +23,16 @@ fun AppNavigation(
     status: JumpController.Status,
     jumpCount: Int,
     isRunning: Boolean,
+    accessibilityRunning: Boolean,
     config: DeviceConfig,
     lastResult: ImageAnalyzer.AnalysisResult?,
     lastScreenshot: Bitmap?,
     onToggle: () -> Unit,
     onConfigChange: (DeviceConfig) -> Unit,
-    onSaveAdb: () -> Unit
+    onSaveAdb: () -> Unit,
+    onOpenAccessibilitySettings: () -> Unit,
+    onOpenAdbSetup: () -> Unit,
+    onActivateRoot: () -> Unit
 ) {
     var currentScreen by remember { mutableStateOf("home") }
 
@@ -53,8 +57,12 @@ fun AppNavigation(
                 )
                 "settings" -> SettingsScreen(
                     config = config,
+                    accessibilityRunning = accessibilityRunning,
                     onConfigChange = onConfigChange,
                     onSaveAdb = onSaveAdb,
+                    onOpenAccessibilitySettings = onOpenAccessibilitySettings,
+                    onOpenAdbSetup = onOpenAdbSetup,
+                    onActivateRoot = onActivateRoot,
                     onBack = { currentScreen = "home" }
                 )
                 "debug" -> DebugScreen(

@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/adbSetupPanel"
+    android:layout_width="280dp"
+    android:layout_height="wrap_content"
+    android:background="#F21A1A24"
+    android:elevation="12dp"
+    android:orientation="vertical"
+    android:padding="10dp">
+
+    <LinearLayout
+        android:id="@+id/dragHandle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="无线 ADB 配对"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/btnCloseAdbSetup"
+            android:layout_width="38dp"
+            android:layout_height="34dp"
+            android:minWidth="0dp"
+            android:text="×"
+            android:textSize="18sp" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="3dp"
+        android:layout_marginBottom="4dp"
+        android:text="此面板会停留在系统设置上方。先在无线调试中查看“IP 地址和端口”，首次使用再打开“使用配对码配对设备”。"
+        android:textColor="#B8B8C8"
+        android:maxLines="3"
+        android:textSize="10sp" />
+
+    <EditText
+        android:id="@+id/etAdbHost"
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:hint="IP 地址（本机可先试 127.0.0.1）"
+        android:inputType="textUri"
+        android:singleLine="true"
+        android:textColor="#FFFFFF"
+        android:textColorHint="#777788"
+        android:textSize="13sp" />
+
+    <EditText
+        android:id="@+id/etAdbPort"
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:hint="连接端口"
+        android:inputType="number"
+        android:maxLength="5"
+        android:singleLine="true"
+        android:textColor="#FFFFFF"
+        android:textColorHint="#777788"
+        android:textSize="13sp" />
+
+    <EditText
+        android:id="@+id/etPairingPort"
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:hint="配对端口（首次连接）"
+        android:inputType="number"
+        android:maxLength="5"
+        android:singleLine="true"
+        android:textColor="#FFFFFF"
+        android:textColorHint="#777788"
+        android:textSize="13sp" />
+
+    <EditText
+        android:id="@+id/etPairingCode"
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:hint="6 位配对码（首次连接）"
+        android:inputType="number"
+        android:maxLength="6"
+        android:singleLine="true"
+        android:textColor="#FFFFFF"
+        android:textColorHint="#777788"
+        android:textSize="13sp" />
+
+    <GridLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:columnCount="4"
+        android:rowCount="3">
+
+        <Button android:id="@+id/btnKey1" style="@style/AdbKeyButton" android:text="1" />
+        <Button android:id="@+id/btnKey2" style="@style/AdbKeyButton" android:text="2" />
+        <Button android:id="@+id/btnKey3" style="@style/AdbKeyButton" android:text="3" />
+        <Button android:id="@+id/btnKey4" style="@style/AdbKeyButton" android:text="4" />
+        <Button android:id="@+id/btnKey5" style="@style/AdbKeyButton" android:text="5" />
+        <Button android:id="@+id/btnKey6" style="@style/AdbKeyButton" android:text="6" />
+        <Button android:id="@+id/btnKey7" style="@style/AdbKeyButton" android:text="7" />
+        <Button android:id="@+id/btnKey8" style="@style/AdbKeyButton" android:text="8" />
+        <Button android:id="@+id/btnKey9" style="@style/AdbKeyButton" android:text="9" />
+        <Button android:id="@+id/btnKeyDot" style="@style/AdbKeyButton" android:text="." />
+        <Button android:id="@+id/btnKey0" style="@style/AdbKeyButton" android:text="0" />
+        <Button android:id="@+id/btnKeyBackspace" style="@style/AdbKeyButton" android:text="⌫" />
+    </GridLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btnOpenWirelessDebugging"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:minHeight="40dp"
+            android:text="打开设置"
+            android:textSize="12sp" />
+
+        <Space
+            android:layout_width="4dp"
+            android:layout_height="1dp" />
+
+        <Button
+            android:id="@+id/btnSaveAdbSetup"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:minHeight="40dp"
+            android:text="保存并连接"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tvAdbSetupStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="等待填写"
+        android:textColor="#A8A8B8"
+        android:maxLines="2"
+        android:textSize="10sp" />
+</LinearLayout>

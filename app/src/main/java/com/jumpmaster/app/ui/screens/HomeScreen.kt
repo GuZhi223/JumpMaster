@@ -91,7 +91,11 @@ fun HomeScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column {
-                val modeLabel = if (captureMode == CaptureMode.ADB) "ADB 模式" else "本地模式"
+                val modeLabel = when (captureMode) {
+                    CaptureMode.LOCAL -> "本地模式"
+                    CaptureMode.ADB -> "ADB 模式"
+                    CaptureMode.ROOT -> "Root 模式"
+                }
                 Text(
                     text = "Jump Master · $modeLabel",
                     style = AppTypography.small,
